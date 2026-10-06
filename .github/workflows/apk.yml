@@ -1,0 +1,46 @@
+name: Gerar APK
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Conferir arquivos enviados
+        run: |
+          ls -la
+          test -f MainActivity.java || { echo "ERRO: MainActivity.java nao esta na raiz do repositorio"; exit 1; }
+          grep -q "__magWant" MainActivity.java || { echo "ERRO: MainActivity.java e a versao antiga"; exit 1; }
+          grep -q "build 7" index.html || { echo "ERRO: index.html e a versao antiga (precisa ter build 7)"; exit 1; }
+          grep -q "hm-logo" index.html && grep -q "url(data:image/webp" index.html || { echo "ERRO: imagens da tela inicial ausentes"; exit 1; }
+          echo "Arquivos conferidos: versao nova"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Preparar app web
+        run: |
+          mkdir -p www
+          cp index.html www/index.html
+      - name: Instalar Capacitor e criar projeto Android
+        run: |
+          npm install
+          npx cap add android
+          MA=$(find android/app/src/main/java -name MainActivity.java | head -1)
+          echo "Substituindo: $MA"
+          cp MainActivity.java "$MA"
+          grep -q "__magWant" "$MA" && echo "PONTE DO MAGNETOMETRO INSTALADA NO PROJETO"
+          npx cap sync android
+          grep -q "build 7" android/app/src/main/assets/public/index.html && echo "PAGINA build 7 DENTRO DO APK"
+      - name: Compilar APK
+        working-directory: android
+        run: ./gradlew assembleDebug
+      - name: Publicar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ferramentas-hvac-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
